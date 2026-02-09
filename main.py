@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)-8s - 
 
 # 加密盐及其它默认值
 KEY = "3c5c8717f3daf09iop3423zafeqoi"
-COOKIE_DATA = {"rq": "%2Fweb%2Fbook%2Fread","ql": True}
+COOKIE_DATA = {"rq": "%2Fweb%2Fbook%2FgetProgress","ql": False}  # 更新为浏览器实际使用的参数
 READ_URL = "https://weread.qq.com/web/book/read"
 RENEW_URL = "https://weread.qq.com/web/login/renewal"
 FIX_SYNCKEY_URL = "https://weread.qq.com/web/book/chapterInfos"
@@ -43,11 +43,20 @@ def cal_hash(input_string):
 
 def get_wr_skey():
     """刷新cookie密钥"""
-    response = requests.post(RENEW_URL, headers=headers, cookies=cookies,
-                             data=json.dumps(COOKIE_DATA, separators=(',', ':')))
+    # 构造 renewal 请求头，添加必要的字段
+    renew_headers = headers.copy()
+    renew_headers['Content-Type'] = 'application/json;charset=UTF-8'
+
+    response = requests.post(RENEW_URL, headers=renew_headers, cookies=cookies,
+                             data=json.dumps(COOKIE_DATA, separators=(',', ':')).encode('utf-8'), timeout=10)
+    logging.info(f"🔄 renewal 响应: {response.status_code}, {response.text}")
+    logging.info(f"🔄 Set-Cookie: {response.headers.get('Set-Cookie', 'None')}")
+
     for cookie in response.headers.get('Set-Cookie', '').split(';'):
         if "wr_skey" in cookie:
-            return cookie.split('=')[-1][:8]
+            skey_value = cookie.split('=')[-1]
+            if skey_value:  # 确保不是空值
+                return skey_value[:8]
     return None
 
 def fix_no_synckey():
@@ -93,7 +102,7 @@ def refresh_cookie():
         logging.info("✅ read 接口可用，继续阅读")
         return True
 
-    ERROR_CODE = "❌ 无法获取新密钥或者WXREAD_CURL_BASH配置有误，终止运行。"
+    ERROR_CODE = "❌ Cookie 已过期，请重新抓包获取新的 WXREAD_CURL_BASH。"
     logging.error(ERROR_CODE)
     push(ERROR_CODE, PUSH_METHOD)
     raise Exception(ERROR_CODE)
